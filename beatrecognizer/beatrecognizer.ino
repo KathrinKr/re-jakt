@@ -45,7 +45,7 @@ int stopAfterOneRun = 0; // in Sekunden
 // CRGB leds[NUM_LEDS];
 
 // Minimalzeit zwischen Beats
-const float minimalInterval = 0.3; // in Sekunden
+const float minimalInterval = 0.2; // in Sekunden
 
 // FFT Setup
 ArduinoFFT<float> FFT = ArduinoFFT<float>(); // Macht aus Ton Frequenz
@@ -89,14 +89,11 @@ void i2sSetup() {
     };
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-    Serial.printf("HOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO~~~~~~~~~~~~~~~~~~~~~ ICH BIN HIER HER GEKOMMEN!!!! :D");
-
 }
 
 void readAudioData(float* buffer, int windowSize) {
     int32_t samples[windowSize];
     size_t bytesRead;
-    Serial.printf("HIIIIIIIIIIIIIIIIIIIIIIIIIIIII ICH BIN HIER HER GEKOMMEN!!!! :D");
     i2s_read(I2S_NUM_0, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
     for (int i = 0; i < windowSize; i++) {
         buffer[i] = samples[i] / 2147483648.0f; // 32-bit zu float
@@ -251,7 +248,7 @@ void setup() {
 
 void loop() 
 {
-  if(stopAfterOneRun == 400){
+  if(stopAfterOneRun == 1000){
     return;
   }
 
@@ -275,10 +272,10 @@ void loop()
   float meanEnergy = 0;
   for (int i=0; i<ENERGY_HISTORY; i++) meanEnergy += energyHistory[i];
   meanEnergy /= ENERGY_HISTORY;
-  float threshold = meanEnergy * 1.2;
+  float threshold = meanEnergy * 1.; //vorher 1,2
 
   float currentTimeSec = (millis() - startMillis) / 1000.0;
-  if (energy > threshold && (currentTimeSec - lastBeat) >= minimalInterval) {
+  if (energy > threshold && energy > 0.05 && (currentTimeSec - lastBeat) >= minimalInterval) {
     if (beatCount < MAX_BEATS) beatsFiltered[beatCount++] = currentTimeSec;
     lastBeat = currentTimeSec;
     Serial.printf("Beat erkannt bei t=%.3f s (Energy=%.2f, thr=%.2f)\n", currentTimeSec, energy, threshold);
@@ -297,9 +294,9 @@ void loop()
   float bassThreshold = 10.0;
 
 
-  //float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
-  //comment out when frequency should be bass or lead vocal
-  float frequenceToUse = dominantFrequency;
+  float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
+
+  // float frequenceToUse = dominantFrequency;
 
   String colorName = mapFrequencyToColorName(frequenceToUse);
 
