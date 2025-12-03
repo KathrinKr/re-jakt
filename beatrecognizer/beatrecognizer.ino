@@ -20,18 +20,29 @@ I2S = digitales Audio-Protokoll
 #include <Arduino.h>
 #include <arduinoFFT.h>   //https://github.com/kosme/arduinoFFT -> von Ton zu frequenz
 
+#include <driver/i2s.h> //microphone
+// #include <FastLED.h> //LED
+
 #define STOP_RUNNING false //zum stoppen der endlosschleife von ESP32. True setzen, wenn man die anwendung beenden will, ohne den ESP32 auszustecken
+int stopAfterOneRun = 0; // in Sekunden
+
 
 // ----- Konfiguration -----
-#define USE_MICROPHONE 0   // 0 = Simulationsmodus (kein Mikro), 1 = INMP441 I2S benutzen
+#define USE_MICROPHONE 1   // 0 = Simulationsmodus (kein Mikro), 1 = INMP441 I2S benutzen
 #define SAMPLE_RATE 44100  //wie oft pro Sekunde das Mikro Werte liefern soll
 #define WINDOW_SIZE 1024   //Anzahl Samples pro Fenster (je groesser desto bessere Frequenzauflösung desto mehr Rechenpower)
 
 // I2S Pins - IF USE_MICROPHONE=1
 //Die Zahlen hier sind jeweils die D[Zahl] Werte des ESPs an denen das Mikro angeschlossen ist
-#define I2S_SD_PIN 22 //Audiodaten des Mikros (Messwerte) 
+#define I2S_SD_PIN 32 //Audiodaten des Mikros (Messwerte) 
 #define I2S_WS_PIN 25 //Wann neuer Sample beginnt
 #define I2S_SCK_PIN 26 //Takt der Datenübertragung
+
+#define NUM_LEDS 60
+#define LED_PIN 2
+
+//defining led array
+// CRGB leds[NUM_LEDS];
 
 // Minimalzeit zwischen Beats
 const float minimalInterval = 0.3; // in Sekunden
@@ -58,8 +69,45 @@ float lastBeat = -minimalInterval;
 
 // ----------------- Funktionen -----------------
 
+void i2sSetup() {
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+        .sample_rate = SAMPLE_RATE,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, // mono
+        .communication_format = I2S_COMM_FORMAT_I2S,
+        .intr_alloc_flags = 0,
+        .dma_buf_count = 4,
+        .dma_buf_len = 1024,
+        .use_apll = false
+    };
+    i2s_pin_config_t pin_config = {
+        .bck_io_num = I2S_SCK_PIN,
+        .ws_io_num = I2S_WS_PIN,
+        .data_out_num = I2S_PIN_NO_CHANGE,
+        .data_in_num = I2S_SD_PIN
+    };
+    i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    i2s_set_pin(I2S_NUM_0, &pin_config);
+    Serial.printf("HOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO~~~~~~~~~~~~~~~~~~~~~ ICH BIN HIER HER GEKOMMEN!!!! :D");
+
+}
+
+void readAudioData(float* buffer, int windowSize) {
+    int32_t samples[windowSize];
+    size_t bytesRead;
+    Serial.printf("HIIIIIIIIIIIIIIIIIIIIIIIIIIIII ICH BIN HIER HER GEKOMMEN!!!! :D");
+    i2s_read(I2S_NUM_0, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
+    for (int i = 0; i < windowSize; i++) {
+        buffer[i] = samples[i] / 2147483648.0f; // 32-bit zu float
+    }
+}
+
+
+
 void sendColorToLEDs(uint8_t r, uint8_t g, uint8_t b) {
   Serial.printf("SEND LED RGB: %u,%u,%u\n", r, g, b);
+
 }
 
 String mapFrequencyToColorName(float dominantFrequency) {
@@ -118,13 +166,15 @@ float findDominantFrequency(float *magnitudes, int len, float sampleRate, int sa
 }
 
 void fillAudioBuffer(float *buffer, int windowSize) {
-  #if USE_MICROPHONE == 1 //if no microphone 
+  #if USE_MICROPHONE == 1 //if microphone 
     for (int i=0 ; i<windowSize; i++) 
     {
       buffer[i] = 0; // Platzhalter für Mikrofon
     }
+    Serial.printf("HIER IST EIN TEST!!!!!!!!!_______________________________________________________");
 
-  #else //if micro
+
+  #else //if no micro
     static unsigned long t = 0;
 
       for (int i=0; i<windowSize; i++) 
@@ -137,8 +187,6 @@ void fillAudioBuffer(float *buffer, int windowSize) {
         buffer[i] = s * beatEnv;
       }
       t += windowSize;
-
-    
 
   #endif
 }
@@ -191,27 +239,35 @@ void setup() {
   }
 
   #if USE_MICROPHONE
+    i2sSetup();
     Serial.println("Microphone mode enabled (I2S). Implement I2S config.");
   #else
     Serial.println("Simulation mode enabled. No microphone is connected.");
   #endif
+
+  // FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
+  // FastLED.setBrightness(50);
 }
 
 void loop() 
 {
-  //in case I want to stop the loop
-  if(STOP_RUNNING){return;}
-
-  //fill buffer with either microphone data or sample data
-  fillAudioBuffer(vRealToneDataInWindow, WINDOW_SIZE);
-
-  // reset
-  for (int i=0; i<WINDOW_SIZE; i++) 
-  {
-    vTempToneDataInWindow[i] = 0.0;
+  if(stopAfterOneRun == 400){
+    return;
   }
 
-  //berechnen von Lautstärke
+  if(STOP_RUNNING){return;}
+
+  // leds[0]=CRGB::Red;
+  // leds[1]=CRGB::Green;
+  // FastLED.show();
+
+  // Audio einlesen
+  readAudioData(vRealToneDataInWindow, WINDOW_SIZE);
+
+  // Reset
+  for (int i=0; i<WINDOW_SIZE; i++) vTempToneDataInWindow[i] = 0.0;
+
+  // Lautstärke berechnen
   float energy = computeEnergy(vRealToneDataInWindow, WINDOW_SIZE);
   energyHistory[energyIndex] = energy;
   energyIndex = (energyIndex + 1) % ENERGY_HISTORY;
@@ -219,7 +275,7 @@ void loop()
   float meanEnergy = 0;
   for (int i=0; i<ENERGY_HISTORY; i++) meanEnergy += energyHistory[i];
   meanEnergy /= ENERGY_HISTORY;
-  float threshold = meanEnergy * 1.2; //Definition eines Beats: Durchschnitt der Energie/Lautstärke*1.2=Beat
+  float threshold = meanEnergy * 1.2;
 
   float currentTimeSec = (millis() - startMillis) / 1000.0;
   if (energy > threshold && (currentTimeSec - lastBeat) >= minimalInterval) {
@@ -228,30 +284,24 @@ void loop()
     Serial.printf("Beat erkannt bei t=%.3f s (Energy=%.2f, thr=%.2f)\n", currentTimeSec, energy, threshold);
   }
 
+  // FFT
   FFT.windowing(vRealToneDataInWindow, WINDOW_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD, vTempToneDataInWindow);
   FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
   FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
 
-  // float dominantFrequency = findDominantFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate, WINDOW_SIZE);
-
   float leadVocalFrequency = findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
   float bassFrequency = findBassFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
 
-  // Pruefen wie laut der Bass ist. Falls zu leise, dann fallback auf vocal
+  float dominantFrequency = findDominantFrequency (vRealToneDataInWindow, WINDOW_SIZE, samplerate, WINDOW_SIZE);
   float bassMagnitude = vRealToneDataInWindow[(int)(bassFrequency * WINDOW_SIZE / SAMPLE_RATE)];
-  float bassThreshold = 10.0; //change maybe
+  float bassThreshold = 10.0;
 
-  float frequenceToUse; //safes which frequence should be used (bass or lead)
-  if(bassMagnitude>bassThreshold){
-    frequenceToUse = bassFrequency;
-  }
-  else {
-    frequenceToUse= leadVocalFrequency; //lead as fallback
-  }
 
-  // String colorName = mapFrequencyToColorName(dominantFrequency);
+  //float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
+  //comment out when frequency should be bass or lead vocal
+  float frequenceToUse = dominantFrequency;
+
   String colorName = mapFrequencyToColorName(frequenceToUse);
-
 
   uint8_t r,g,b;
   colorNameToRGB(colorName, r, g, b);
@@ -260,4 +310,7 @@ void loop()
 
   float waitSec = (float)WINDOW_SIZE / samplerate;
   delay(max(10UL, (unsigned long)(waitSec*1000.0)));
+
+  stopAfterOneRun++;
+  
 }
