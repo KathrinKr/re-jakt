@@ -21,13 +21,26 @@ I2S = digitales Audio-Protokoll
 #include <arduinoFFT.h>   //https://github.com/kosme/arduinoFFT -> von Ton zu frequenz
 
 #include <driver/i2s.h> //microphone
-// #include <FastLED.h> //LED
+#include <Adafruit_NeoPixel.h>
+
+//pitch
+#include <Yin.h>
+
 
 #define STOP_RUNNING false //zum stoppen der endlosschleife von ESP32. True setzen, wenn man die anwendung beenden will, ohne den ESP32 auszustecken
 int stopAfterOneRun = 0; // in Sekunden
 
 
 // ----- Konfiguration -----
+
+//test frequenzglättung
+#define FREQ_HISTORY 8
+float freqHistory[FREQ_HISTORY];
+int freqIndex = 0;
+//test ende
+
+
+
 #define USE_MICROPHONE 1   // 0 = Simulationsmodus (kein Mikro), 1 = INMP441 I2S benutzen
 #define SAMPLE_RATE 44100  //wie oft pro Sekunde das Mikro Werte liefern soll
 #define WINDOW_SIZE 1024   //Anzahl Samples pro Fenster (je groesser desto bessere Frequenzauflösung desto mehr Rechenpower)
@@ -38,14 +51,15 @@ int stopAfterOneRun = 0; // in Sekunden
 #define I2S_WS_PIN 25 //Wann neuer Sample beginnt
 #define I2S_SCK_PIN 26 //Takt der Datenübertragung
 
-#define NUM_LEDS 60
-#define LED_PIN 2
+#define NUM_LEDS 300
+#define LED_PIN 18
+Adafruit_NeoPixel ledStrip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 //defining led array
 // CRGB leds[NUM_LEDS];
 
 // Minimalzeit zwischen Beats
-const float minimalInterval = 0.2; // in Sekunden
+const float minimalInterval = 0.35; // in Sekunden
 
 // FFT Setup
 ArduinoFFT<float> FFT = ArduinoFFT<float>(); // Macht aus Ton Frequenz
@@ -66,6 +80,12 @@ int energyIndex = 0;
 float beatsFiltered[MAX_BEATS];
 int beatCount = 0;
 float lastBeat = -minimalInterval;
+
+//pitch detection
+#define WINDOW_SIZE 1024
+Yin yin(WINDOW_SIZE, 0.2); // 0.2 = how sure yin algorithm should be with the tone (1 being the most sure and -1 least sure)
+int16_t yinBuffer[WINDOW_SIZE];
+
 
 // ----------------- Funktionen -----------------
 
@@ -96,31 +116,31 @@ void readAudioData(float* buffer, int windowSize) {
     size_t bytesRead;
     i2s_read(I2S_NUM_0, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
     for (int i = 0; i < windowSize; i++) {
-        buffer[i] = samples[i] / 2147483648.0f; // 32-bit zu float
+        buffer[i] = (samples[i] / 2147483648.0f) * 50.0f; // 32-bit zu float
     }
 }
 
 
 
 void sendColorToLEDs(uint8_t r, uint8_t g, uint8_t b) {
+  ledStrip.fill(ledStrip.Color(r, g, b));
+  ledStrip.show();
   Serial.printf("SEND LED RGB: %u,%u,%u\n", r, g, b);
-
+  delay(360);
 }
 
 String mapFrequencyToColorName(float dominantFrequency) {
   String color;
-  if (dominantFrequency <= 120) color = "Purple";
-  else if (dominantFrequency <= 160) color = "Dark Blue";
-  else if (dominantFrequency <= 200) color = "Deep Blue";
-  else if (dominantFrequency <= 275) color = "Sky Blue";
-  else if (dominantFrequency <= 350) color = "bright blue";
-  else if (dominantFrequency <= 500) color = "Turquoise";
-  else if (dominantFrequency <= 1000) color = "Green";
-  else if (dominantFrequency <= 2000) color = "Yellow";
-  else if (dominantFrequency <= 3000) color = "Occher";
-  else if (dominantFrequency <= 4500) color = "Orange";
-  else if (dominantFrequency <= 6000) color = "Ginger";
-  else color = "Red";
+  if (dominantFrequency < 300) return "Neutral";
+  else if (dominantFrequency <= 600) return "Red";
+  else if (dominantFrequency <= 1000) return "Orange";
+  else if (dominantFrequency <= 1500) return "Yellow";
+  else if (dominantFrequency <= 2000) return "Green";
+  else if (dominantFrequency <= 2500) return "Blue";
+  else if (dominantFrequency <= 3000) return "Purple";
+  else return "Neutral";
+
+
   return color;
 }
 
@@ -218,7 +238,14 @@ float findVocalFrequency(float *magnitudes, int len, float sampleRate) {
     return (float)maxIndex * sampleRate / len;
   }
 
+  float smoothFrequency(float newFreq) {
+    freqHistory[freqIndex] = newFreq;
+    freqIndex = (freqIndex + 1) % FREQ_HISTORY;
 
+    float sum = 0;
+    for (int i=0; i<FREQ_HISTORY; i++) sum += freqHistory[i];
+    return sum / FREQ_HISTORY;
+  }
 
   
 
@@ -242,15 +269,17 @@ void setup() {
     Serial.println("Simulation mode enabled. No microphone is connected.");
   #endif
 
-  // FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
-  // FastLED.setBrightness(50);
+  //initializing whole led strip
+  ledStrip.begin();       
+  ledStrip.show();        
+  ledStrip.setBrightness(50);
 }
 
 void loop() 
 {
-  if(stopAfterOneRun == 1000){
-    return;
-  }
+  // if(stopAfterOneRun == 1000){
+  //   return;
+  // }
 
   if(STOP_RUNNING){return;}
 
@@ -269,44 +298,67 @@ void loop()
   energyHistory[energyIndex] = energy;
   energyIndex = (energyIndex + 1) % ENERGY_HISTORY;
 
+    //Compare energy in this window bigger then last window (meanEnergy)
   float meanEnergy = 0;
   for (int i=0; i<ENERGY_HISTORY; i++) meanEnergy += energyHistory[i];
   meanEnergy /= ENERGY_HISTORY;
-  float threshold = meanEnergy * 1.; //vorher 1,2
+  float threshold = meanEnergy * 1.8; //vorher 1,2
 
+  //energy must be higher then 0.05 to be a beat and no accident
+  //check for minimal interval so there is not too many beats detected
   float currentTimeSec = (millis() - startMillis) / 1000.0;
   if (energy > threshold && energy > 0.05 && (currentTimeSec - lastBeat) >= minimalInterval) {
     if (beatCount < MAX_BEATS) beatsFiltered[beatCount++] = currentTimeSec;
     lastBeat = currentTimeSec;
     Serial.printf("Beat erkannt bei t=%.3f s (Energy=%.2f, thr=%.2f)\n", currentTimeSec, energy, threshold);
+
+    float frequenceToUse;
+
+    frequenceToUse = smoothFrequency(findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate));
+          
+    // // FFT
+    // FFT.windowing(vRealToneDataInWindow, WINDOW_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD, vTempToneDataInWindow);
+    // FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
+    // FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
+
+    // float leadVocalFrequency = findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
+    // float bassFrequency = findBassFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
+
+    // float dominantFrequency = findDominantFrequency (vRealToneDataInWindow, WINDOW_SIZE, samplerate, WINDOW_SIZE);
+    // float bassMagnitude = vRealToneDataInWindow[(int)(bassFrequency * WINDOW_SIZE / SAMPLE_RATE)];
+    // float bassThreshold = 10.0;
+    // float vocalMagnitude = vRealToneDataInWindow[(int)(leadVocalFrequency * WINDOW_SIZE / SAMPLE_RATE)];
+
+
+    // // float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
+
+    // // float frequenceToUse;
+    // float frequenceToUse = smoothFrequency(leadVocalFrequency);
+
+
+    // if(vocalMagnitude > 5.0){
+      // frequenceToUse = leadVocalFrequency;
+    // }
+    // else {
+    //   frequenceToUse = dominantFrequency;
+    // }
+
+    // float frequenceToUse = dominantFrequency;
+
+    // String colorName = mapFrequencyToColorName(frequenceToUse);
+
+    //mapping to color
+    String colorName = mapFrequencyToColorName(frequenceToUse);
+
+    uint8_t r,g,b;
+    colorNameToRGB(colorName, r, g, b);
+    sendColorToLEDs(r,g,b);
+    Serial.println(colorName + " is currently showing");
+
+    float waitSec = (float)WINDOW_SIZE / samplerate;
+    delay(max(10UL, (unsigned long)(waitSec*1000.0)));
   }
 
-  // FFT
-  FFT.windowing(vRealToneDataInWindow, WINDOW_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD, vTempToneDataInWindow);
-  FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
-  FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
-
-  float leadVocalFrequency = findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
-  float bassFrequency = findBassFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
-
-  float dominantFrequency = findDominantFrequency (vRealToneDataInWindow, WINDOW_SIZE, samplerate, WINDOW_SIZE);
-  float bassMagnitude = vRealToneDataInWindow[(int)(bassFrequency * WINDOW_SIZE / SAMPLE_RATE)];
-  float bassThreshold = 10.0;
-
-
-  float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
-
-  // float frequenceToUse = dominantFrequency;
-
-  String colorName = mapFrequencyToColorName(frequenceToUse);
-
-  uint8_t r,g,b;
-  colorNameToRGB(colorName, r, g, b);
-  sendColorToLEDs(r,g,b);
-  Serial.println(colorName + " is currently showing");
-
-  float waitSec = (float)WINDOW_SIZE / samplerate;
-  delay(max(10UL, (unsigned long)(waitSec*1000.0)));
 
   stopAfterOneRun++;
   
