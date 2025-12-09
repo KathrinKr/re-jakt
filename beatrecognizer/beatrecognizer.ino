@@ -51,12 +51,13 @@ int freqIndex = 0;
 #define I2S_WS_PIN 25 //Wann neuer Sample beginnt
 #define I2S_SCK_PIN 26 //Takt der Datenübertragung
 
+//Defining
 #define NUM_LEDS 300
 #define LED_PIN 18
+//defining led array
 Adafruit_NeoPixel ledStrip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-//defining led array
-// CRGB leds[NUM_LEDS];
+
 
 // Minimalzeit zwischen Beats
 const float minimalInterval = 0.35; // in Sekunden
@@ -82,9 +83,9 @@ int beatCount = 0;
 float lastBeat = -minimalInterval;
 
 //pitch detection
-#define WINDOW_SIZE 1024
-Yin yin(WINDOW_SIZE, 0.2); // 0.2 = how sure yin algorithm should be with the tone (1 being the most sure and -1 least sure)
-int16_t yinBuffer[WINDOW_SIZE];
+
+// Yin yin(WINDOW_SIZE, 0.2); // 0.2 = how sure yin algorithm should be with the tone (1 being the most sure and -1 least sure)
+// int16_t yinBuffer[WINDOW_SIZE];
 
 
 // ----------------- Funktionen -----------------
@@ -116,7 +117,7 @@ void readAudioData(float* buffer, int windowSize) {
     size_t bytesRead;
     i2s_read(I2S_NUM_0, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
     for (int i = 0; i < windowSize; i++) {
-        buffer[i] = (samples[i] / 2147483648.0f) * 50.0f; // 32-bit zu float
+        buffer[i] = (samples[i] / 2147483648.0f) * 25.0f; // 32-bit zu float
     }
 }
 
@@ -126,22 +127,22 @@ void sendColorToLEDs(uint8_t r, uint8_t g, uint8_t b) {
   ledStrip.fill(ledStrip.Color(r, g, b));
   ledStrip.show();
   Serial.printf("SEND LED RGB: %u,%u,%u\n", r, g, b);
-  delay(360);
 }
 
 String mapFrequencyToColorName(float dominantFrequency) {
-  String color;
-  if (dominantFrequency < 300) return "Neutral";
-  else if (dominantFrequency <= 600) return "Red";
-  else if (dominantFrequency <= 1000) return "Orange";
-  else if (dominantFrequency <= 1500) return "Yellow";
-  else if (dominantFrequency <= 2000) return "Green";
-  else if (dominantFrequency <= 2500) return "Blue";
+  if (dominantFrequency < 200) return "Red";
+  else if (dominantFrequency <= 400) return "Orange";
+  else if (dominantFrequency <= 600) return "Ginger";
+  else if (dominantFrequency <= 800) return "Yellow";
+  else if (dominantFrequency <= 1000) return "Occher";
+  else if (dominantFrequency <= 1200) return "Green";
+  else if (dominantFrequency <= 1500) return "Turquoise";
+  else if (dominantFrequency <= 1800) return "Sky Blue";
+  else if (dominantFrequency <= 2100) return "bright blue";
+  else if (dominantFrequency <= 2400) return "Deep Blue";
+  else if (dominantFrequency <= 2700) return "Dark Blue";
   else if (dominantFrequency <= 3000) return "Purple";
-  else return "Neutral";
-
-
-  return color;
+  else return "Neutral"; // fallback
 }
 
 void colorNameToRGB(const String &name, uint8_t &r, uint8_t &g, uint8_t &b) {
@@ -157,7 +158,7 @@ void colorNameToRGB(const String &name, uint8_t &r, uint8_t &g, uint8_t &b) {
   else if (name == "Orange") { r=255; g=120; b=0; }
   else if (name == "Ginger") { r=255; g=180; b=50; }
   else if (name == "Red") { r=255; g=0; b=0; }
-  else { r=128; g=128; b=128; }
+  else { r=128; g=128; b=128; } // Neutral
 }
 
 float computeEnergy(const float *buffer, int len) {
@@ -188,7 +189,6 @@ void fillAudioBuffer(float *buffer, int windowSize) {
     {
       buffer[i] = 0; // Platzhalter für Mikrofon
     }
-    Serial.printf("HIER IST EIN TEST!!!!!!!!!_______________________________________________________");
 
 
   #else //if no micro
@@ -314,12 +314,14 @@ void loop()
 
     float frequenceToUse;
 
-    frequenceToUse = smoothFrequency(findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate));
           
-    // // FFT
-    // FFT.windowing(vRealToneDataInWindow, WINDOW_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD, vTempToneDataInWindow);
-    // FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
-    // FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
+    // FFT
+    FFT.windowing(vRealToneDataInWindow, WINDOW_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD, vTempToneDataInWindow);
+    FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
+    FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
+
+    frequenceToUse = smoothFrequency(findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate));
+
 
     // float leadVocalFrequency = findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
     // float bassFrequency = findBassFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
