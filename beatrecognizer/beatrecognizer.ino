@@ -48,8 +48,8 @@ int freqIndex = 0;
 // I2S Pins - IF USE_MICROPHONE=1
 //Die Zahlen hier sind jeweils die D[Zahl] Werte des ESPs an denen das Mikro angeschlossen ist
 #define I2S_SD_PIN 32 //Audiodaten des Mikros (Messwerte) 
-#define I2S_WS_PIN 25 //Wann neuer Sample beginnt
-#define I2S_SCK_PIN 26 //Takt der Datenübertragung
+#define I2S_WS_PIN 15 //Wann neuer Sample beginnt
+#define I2S_SCK_PIN 14 //Takt der Datenübertragung
 
 //Defining
 #define NUM_LEDS 300
@@ -116,6 +116,7 @@ void readAudioData(float* buffer, int windowSize) {
     int32_t samples[windowSize];
     size_t bytesRead;
     i2s_read(I2S_NUM_0, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
+
     for (int i = 0; i < windowSize; i++) {
         buffer[i] = (samples[i] / 2147483648.0f) * 25.0f; // 32-bit zu float
     }
@@ -129,36 +130,84 @@ void sendColorToLEDs(uint8_t r, uint8_t g, uint8_t b) {
   Serial.printf("SEND LED RGB: %u,%u,%u\n", r, g, b);
 }
 
+// String mapFrequencyToColorName(float dominantFrequency) {
+//   if (dominantFrequency < 200) return "Red";
+//   else if (dominantFrequency <= 400) return "Orange";
+//   else if (dominantFrequency <= 600) return "Ginger";
+//   else if (dominantFrequency <= 800) return "Yellow";
+//   else if (dominantFrequency <= 1000) return "Occher";
+//   else if (dominantFrequency <= 1200) return "Green";
+//   else if (dominantFrequency <= 1500) return "Turquoise";
+//   else if (dominantFrequency <= 1800) return "Sky Blue";
+//   else if (dominantFrequency <= 2100) return "bright blue";
+//   else if (dominantFrequency <= 2400) return "Deep Blue";
+//   else if (dominantFrequency <= 2700) return "Dark Blue";
+//   else if (dominantFrequency <= 3000) return "Purple";
+//   else return "Neutral"; // fallback
+// }
+
+// void colorNameToRGB(const String &name, uint8_t &r, uint8_t &g, uint8_t &b) {
+//   if (name == "Purple") { r=128; g=0; b=128; }
+//   else if (name == "Dark Blue") { r=0; g=0; b=100; }
+//   else if (name == "Deep Blue") { r=0; g=50; b=200; }
+//   else if (name == "Sky Blue") { r=0; g=150; b=255; }
+//   else if (name == "bright blue") { r=50; g=180; b=255; }
+//   else if (name == "Turquoise") { r=0; g=255; b=200; }
+//   else if (name == "Green") { r=0; g=255; b=0; }
+//   else if (name == "Yellow") { r=255; g=200; b=0; }
+//   else if (name == "Occher") { r=200; g=130; b=0; }
+//   else if (name == "Orange") { r=255; g=120; b=0; }
+//   else if (name == "Ginger") { r=255; g=180; b=50; }
+//   else if (name == "Red") { r=255; g=0; b=0; }
+//   else { r=128; g=128; b=128; } // Neutral
+// }
+
+
 String mapFrequencyToColorName(float dominantFrequency) {
-  if (dominantFrequency < 200) return "Red";
-  else if (dominantFrequency <= 400) return "Orange";
-  else if (dominantFrequency <= 600) return "Ginger";
-  else if (dominantFrequency <= 800) return "Yellow";
-  else if (dominantFrequency <= 1000) return "Occher";
-  else if (dominantFrequency <= 1200) return "Green";
-  else if (dominantFrequency <= 1500) return "Turquoise";
-  else if (dominantFrequency <= 1800) return "Sky Blue";
-  else if (dominantFrequency <= 2100) return "bright blue";
-  else if (dominantFrequency <= 2400) return "Deep Blue";
-  else if (dominantFrequency <= 2700) return "Dark Blue";
-  else if (dominantFrequency <= 3000) return "Purple";
-  else return "Neutral"; // fallback
+  if (dominantFrequency < 970) return "Neutral";
+  else if (dominantFrequency <= 1080) return "Red";
+  else if (dominantFrequency <= 1190) return "Bright Red";
+  else if (dominantFrequency <= 1300) return "Deep Orange";
+  else if (dominantFrequency <= 1410) return "Orange";
+  else if (dominantFrequency <= 1520) return "Yellow";
+  else if (dominantFrequency <= 1630) return "Lime";
+  else if (dominantFrequency <= 1740) return "Green";
+  else if (dominantFrequency <= 1850) return "Turquoise";
+  else if (dominantFrequency <= 1960) return "Sky Blue";
+  else if (dominantFrequency <= 2070) return "Blue";
+  else if (dominantFrequency <= 2180) return "Dark Blue";
+  else if (dominantFrequency <= 2290) return "Indigo";
+  else if (dominantFrequency <= 2400) return "Purple";
+  else if (dominantFrequency <= 2510) return "Deep Purple";
+  else if (dominantFrequency <= 2630) return "Deep Purple";
+  else if (dominantFrequency <= 4000) return "Brown";
+  else return "Neutral";
 }
 
 void colorNameToRGB(const String &name, uint8_t &r, uint8_t &g, uint8_t &b) {
-  if (name == "Purple") { r=128; g=0; b=128; }
-  else if (name == "Dark Blue") { r=0; g=0; b=100; }
-  else if (name == "Deep Blue") { r=0; g=50; b=200; }
-  else if (name == "Sky Blue") { r=0; g=150; b=255; }
-  else if (name == "bright blue") { r=50; g=180; b=255; }
-  else if (name == "Turquoise") { r=0; g=255; b=200; }
-  else if (name == "Green") { r=0; g=255; b=0; }
-  else if (name == "Yellow") { r=255; g=200; b=0; }
-  else if (name == "Occher") { r=200; g=130; b=0; }
-  else if (name == "Orange") { r=255; g=120; b=0; }
-  else if (name == "Ginger") { r=255; g=180; b=50; }
-  else if (name == "Red") { r=255; g=0; b=0; }
-  else { r=128; g=128; b=128; } // Neutral
+  if (name == "Deep Purple")      { r=40;  g=0;   b=60;  }
+  else if (name == "Purple")     { r=70;  g=0;   b=90;  }
+  else if (name == "Indigo")     { r=40;  g=0;   b=120; }
+
+  else if (name == "Dark Blue")  { r=0;   g=0;   b=120; }
+  else if (name == "Blue")       { r=0;   g=60;  b=180; }
+  else if (name == "Sky Blue")   { r=0;   g=130; b=230; }
+
+  else if (name == "Turquoise")  { r=0;   g=200; b=180; }
+  else if (name == "Green")      { r=0;   g=255; b=80;  }
+
+  else if (name == "Lime")       { r=160; g=255; b=0;   }
+  else if (name == "Yellow")     { r=255; g=230; b=0;   }
+
+  else if (name == "Orange")     { r=255; g=150; b=0;   }
+  else if (name == "Deep Orange"){ r=255; g=100; b=0;   }
+
+  else if (name == "Red")        { r=255; g=60;  b=60;  }
+  else if (name == "Bright Red") { r=255; g=120; b=120;}
+  else if (name == "Brown") {r=60; g=30; b=10;}
+
+  else                            { r=120; g=120; b=120; }
+
 }
 
 float computeEnergy(const float *buffer, int len) {
@@ -247,6 +296,25 @@ float findVocalFrequency(float *magnitudes, int len, float sampleRate) {
     return sum / FREQ_HISTORY;
   }
 
+  //pitch detection from FFT
+  float detectPitchFFT(float* magnitudes, int windowSize, float sampleRate) {
+  int lowIndex = (int)(80.0 * windowSize / sampleRate);
+  int highIndex = (int)(3000.0 * windowSize / sampleRate);
+
+  int maxIndex = lowIndex;
+  float maxVal = 0;
+
+  for (int i = lowIndex; i <= highIndex; i++) {
+    if (magnitudes[i] > maxVal) {
+      maxVal = magnitudes[i];
+      maxIndex = i;
+    }
+  }
+
+  return (float)maxIndex * sampleRate / windowSize;
+}
+
+
   
 
 // ----------------- Setup & Loop -----------------
@@ -277,15 +345,6 @@ void setup() {
 
 void loop() 
 {
-  // if(stopAfterOneRun == 1000){
-  //   return;
-  // }
-
-  if(STOP_RUNNING){return;}
-
-  // leds[0]=CRGB::Red;
-  // leds[1]=CRGB::Green;
-  // FastLED.show();
 
   // Audio einlesen
   readAudioData(vRealToneDataInWindow, WINDOW_SIZE);
@@ -298,7 +357,7 @@ void loop()
   energyHistory[energyIndex] = energy;
   energyIndex = (energyIndex + 1) % ENERGY_HISTORY;
 
-    //Compare energy in this window bigger then last window (meanEnergy)
+  //Compare energy in this window bigger then last window (meanEnergy)
   float meanEnergy = 0;
   for (int i=0; i<ENERGY_HISTORY; i++) meanEnergy += energyHistory[i];
   meanEnergy /= ENERGY_HISTORY;
@@ -310,7 +369,6 @@ void loop()
   if (energy > threshold && energy > 0.05 && (currentTimeSec - lastBeat) >= minimalInterval) {
     if (beatCount < MAX_BEATS) beatsFiltered[beatCount++] = currentTimeSec;
     lastBeat = currentTimeSec;
-    Serial.printf("Beat erkannt bei t=%.3f s (Energy=%.2f, thr=%.2f)\n", currentTimeSec, energy, threshold);
 
     float frequenceToUse;
 
@@ -320,37 +378,20 @@ void loop()
     FFT.compute(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE, FFT_FORWARD);
     FFT.complexToMagnitude(vRealToneDataInWindow, vTempToneDataInWindow, WINDOW_SIZE);
 
-    frequenceToUse = smoothFrequency(findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate));
+    float pitch = smoothFrequency(
+      detectPitchFFT(vRealToneDataInWindow, WINDOW_SIZE, SAMPLE_RATE)
+    );
+    Serial.printf("Beat erkannt bei t=%.3f s (Energy=%.2f, thr=%.2f)\n", currentTimeSec, energy, threshold);
+    Serial.printf("Pitch: %.2f\n", pitch);
 
 
-    // float leadVocalFrequency = findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
-    // float bassFrequency = findBassFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate);
 
-    // float dominantFrequency = findDominantFrequency (vRealToneDataInWindow, WINDOW_SIZE, samplerate, WINDOW_SIZE);
-    // float bassMagnitude = vRealToneDataInWindow[(int)(bassFrequency * WINDOW_SIZE / SAMPLE_RATE)];
-    // float bassThreshold = 10.0;
-    // float vocalMagnitude = vRealToneDataInWindow[(int)(leadVocalFrequency * WINDOW_SIZE / SAMPLE_RATE)];
-
-
-    // // float frequenceToUse = (bassMagnitude > bassThreshold) ? bassFrequency : leadVocalFrequency;
-
-    // // float frequenceToUse;
-    // float frequenceToUse = smoothFrequency(leadVocalFrequency);
-
-
-    // if(vocalMagnitude > 5.0){
-      // frequenceToUse = leadVocalFrequency;
-    // }
-    // else {
-    //   frequenceToUse = dominantFrequency;
-    // }
-
-    // float frequenceToUse = dominantFrequency;
-
-    // String colorName = mapFrequencyToColorName(frequenceToUse);
+    // frequenceToUse = smoothFrequency(findVocalFrequency(vRealToneDataInWindow, WINDOW_SIZE, samplerate));
 
     //mapping to color
-    String colorName = mapFrequencyToColorName(frequenceToUse);
+    // String colorName = mapFrequencyToColorName(frequenceToUse);
+    String colorName = mapFrequencyToColorName(pitch);
+
 
     uint8_t r,g,b;
     colorNameToRGB(colorName, r, g, b);
