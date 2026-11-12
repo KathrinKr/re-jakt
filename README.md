@@ -11,4 +11,4 @@
   • WS2812B: LEDs for visual feedback
 
   Status:
-  This project is a concept and wip
+  This project is a prototype. Current status: on hold.
